@@ -1,0 +1,615 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Billetterie QR</title>
+<style>
+*{box-sizing:border-box}
+:root{--brand:#e4572e;--bg:#0e1116;--panel:#171b22;--panel2:#1d222b;--line:#272d38;--text:#eef1f5;--muted:#8e98a8;--ok:#22c55e;--bad:#ef4444;--warn:#f59e0b}
+html,body{margin:0;background:var(--bg);color:var(--text);font:15px/1.45 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
+[hidden]{display:none!important}
+.top{position:sticky;top:0;z-index:5;background:var(--bg);border-bottom:1px solid var(--line);padding:10px 16px;display:flex;gap:16px;align-items:center;flex-wrap:wrap}
+.brand{display:flex;gap:12px;align-items:center;min-width:0}
+#logoImg{height:42px;max-width:130px;object-fit:contain;border-radius:8px;background:#fff;padding:3px}
+.mark{width:42px;height:42px;border-radius:10px;background:var(--brand);display:grid;place-items:center;font-weight:700;font-size:18px}
+.ev{font-weight:700;font-size:16px}
+.cl{color:var(--muted);font-size:13px}
+.tabs{display:flex;gap:4px;margin-left:auto;overflow-x:auto}
+.tabs button{background:none;border:0;color:var(--muted);padding:9px 14px;border-radius:8px;font:inherit;cursor:pointer;white-space:nowrap}
+.tabs button.on{background:var(--panel2);color:var(--text);box-shadow:inset 0 -2px 0 var(--brand)}
+main{max-width:1100px;margin:0 auto;padding:16px}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:16px;margin-bottom:16px}
+h2{margin:0 0 12px;font-size:17px}
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+@media(max-width:760px){.grid2{grid-template-columns:1fr}}
+label{display:block;color:var(--muted);font-size:13px;margin:0 0 4px}
+input,select,textarea{width:100%;background:var(--panel2);border:1px solid var(--line);color:var(--text);border-radius:9px;padding:10px 12px;font:inherit}
+input[type=color]{padding:2px;height:42px}
+textarea{resize:vertical;min-height:80px}
+.row{display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end}
+.row>*{flex:1 1 160px}
+.btn{background:var(--brand);color:#fff;border:0;border-radius:9px;padding:10px 16px;font:inherit;font-weight:600;cursor:pointer;flex:0 0 auto;width:auto}
+.btn.ghost{background:var(--panel2);border:1px solid var(--line);color:var(--text);font-weight:500}
+.btn.danger{background:#7f1d1d}
+.btn.sm{padding:5px 10px;font-size:13px}
+.btn:disabled{opacity:.4;cursor:not-allowed}
+.count{display:flex;align-items:baseline;gap:10px}
+.count b{font-size:76px;line-height:1;font-variant-numeric:tabular-nums}
+.count .of{font-size:28px;color:var(--muted)}
+.bar{height:12px;background:var(--panel2);border-radius:99px;overflow:hidden;margin:12px 0 8px}
+.bar i{display:block;height:100%;width:0;background:var(--ok);transition:width .25s,background .25s}
+.note{font-size:14px;color:var(--muted)}
+.note.full{color:var(--bad);font-weight:700}
+.result{min-height:190px;border:2px solid var(--line);border-radius:14px;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;padding:16px;gap:4px;transition:background .15s,border-color .15s}
+.result .t{font-size:30px;font-weight:800}
+.result .d{font-size:17px}
+.result .s{font-size:14px;color:var(--muted)}
+.result.idle{color:var(--muted)}
+.result.ok{background:#0f3d22;border-color:var(--ok)}
+.result.dup,.result.wrong{background:#43300a;border-color:var(--warn)}
+.result.full,.result.invalid{background:#4a1414;border-color:var(--bad)}
+#reader{width:100%;max-width:420px;margin:12px auto 0;border-radius:12px;overflow:hidden}
+.scroll{overflow-x:auto}
+.tbl{width:100%;border-collapse:collapse;font-size:14px}
+.tbl th{text-align:left;color:var(--muted);font-weight:500;padding:8px;border-bottom:1px solid var(--line);white-space:nowrap}
+.tbl td{padding:7px 8px;border-bottom:1px solid var(--line);vertical-align:middle}
+.tbl input{padding:6px 8px}
+.mono{font-family:ui-monospace,Menlo,Consolas,monospace}
+.badge{display:inline-block;padding:2px 9px;border-radius:99px;font-size:12px;font-weight:600}
+.b-ok{background:#0f3d22;color:#6ee7a1}
+.b-dup,.b-wrong{background:#43300a;color:#fcd34d}
+.b-full,.b-invalid{background:#4a1414;color:#fca5a5}
+.b-x{background:var(--panel2);color:var(--muted);text-decoration:line-through}
+.hint{color:var(--muted);font-size:13px;margin:8px 0 0}
+.warn{background:#43300a;border:1px solid var(--warn);color:#fcd34d;border-radius:10px;padding:10px 12px;margin-bottom:16px;font-size:14px}
+.toast{position:fixed;left:50%;bottom:20px;transform:translateX(-50%);background:#000c;border:1px solid var(--line);padding:10px 16px;border-radius:99px;z-index:20}
+.actions{display:flex;gap:6px;flex-wrap:wrap}
+.logo-prev{height:60px;max-width:200px;object-fit:contain;background:#fff;border-radius:8px;padding:4px}
+
+/* Planche à imprimer */
+#printSheet{display:none}
+@media print{
+  body.printing{background:#fff;color:#000}
+  body.printing .top,body.printing main,body.printing .toast{display:none!important}
+  body.printing #printSheet{display:grid;grid-template-columns:repeat(3,1fr);gap:7mm}
+  .pcard{border:1px solid #222;border-radius:8px;padding:6mm;text-align:center;break-inside:avoid;color:#000;background:#fff}
+  .pcard .ph{display:flex;align-items:center;justify-content:center;gap:8px;min-height:11mm;margin-bottom:3mm}
+  .pcard .ph img.lg{max-height:11mm;max-width:30mm;object-fit:contain}
+  .pcard .pe{font-weight:700;font-size:11pt}
+  .pcard img.qr{width:100%;max-width:48mm;image-rendering:pixelated}
+  .pcard .pn{font-weight:700;font-size:11pt;margin-top:2mm}
+  .pcard .pc{font:10pt ui-monospace,Menlo,Consolas,monospace;margin-top:1mm}
+  .pcard .ps{font-size:9pt;color:#444;margin-top:1mm}
+}
+</style>
+</head>
+<body>
+
+<header class="top">
+  <div class="brand">
+    <img id="logoImg" alt="" hidden>
+    <span id="logoFallback" class="mark">★</span>
+    <div><div id="evName" class="ev"></div><div id="clName" class="cl"></div></div>
+  </div>
+  <nav class="tabs" id="tabs">
+    <button data-tab="scan" class="on">Entrée</button>
+    <button data-tab="tickets">Billets</button>
+    <button data-tab="sessions">Sessions</button>
+    <button data-tab="log">Journal</button>
+    <button data-tab="settings">Réglages</button>
+  </nav>
+</header>
+
+<main>
+  <div id="storageWarn" class="warn" hidden>Le stockage du navigateur est indisponible (navigation privée ?). Les données seront perdues à la fermeture de la page.</div>
+
+  <!-- ENTRÉE -->
+  <section id="tab-scan">
+    <div class="card">
+      <div class="row">
+        <div style="flex:2 1 260px"><label for="activeSession">Session en cours</label><select id="activeSession"></select></div>
+      </div>
+    </div>
+    <div class="grid2">
+      <div>
+        <div class="card">
+          <h2>Occupation de la salle</h2>
+          <div class="count"><b id="cNow">0</b><span class="of">/ <span id="cMax">0</span></span></div>
+          <div class="bar"><i id="cBar"></i></div>
+          <div id="cNote" class="note"></div>
+        </div>
+        <div class="card">
+          <h2>Scanner un billet</h2>
+          <button id="camBtn" class="btn">Activer la caméra</button>
+          <div id="reader"></div>
+          <p id="camMsg" class="hint"></p>
+          <form id="manual" style="margin-top:14px" autocomplete="off">
+            <label for="codeIn">Ou saisir / scanner avec une douchette</label>
+            <div class="row">
+              <input id="codeIn" class="mono" placeholder="TK-XXXXXXXX" autocapitalize="characters" spellcheck="false">
+              <button class="btn" type="submit">Valider</button>
+            </div>
+          </form>
+        </div>
+      </div>
+      <div>
+        <div class="card">
+          <h2>Dernier scan</h2>
+          <div id="result" class="result idle"><div class="d">En attente d'un scan…</div></div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- BILLETS -->
+  <section id="tab-tickets" hidden>
+    <div class="card">
+      <h2>Générer des billets</h2>
+      <div class="row">
+        <div style="flex:0 1 130px"><label for="gQty">Quantité</label><input id="gQty" type="number" min="1" max="500" value="10"></div>
+        <div><label for="gSession">Valable pour</label><select id="gSession"></select></div>
+      </div>
+      <div style="margin-top:12px">
+        <label for="gNames">Noms des invités (optionnel — un par ligne, remplace la quantité)</label>
+        <textarea id="gNames" placeholder="Aina Rakoto&#10;Hery Andria"></textarea>
+      </div>
+      <div style="margin-top:12px"><button id="gBtn" class="btn">Générer</button></div>
+    </div>
+    <div class="card">
+      <h2>Billets <span id="tCount" class="note"></span></h2>
+      <div class="row" style="margin-bottom:12px">
+        <div><label for="tSearch">Rechercher</label><input id="tSearch" placeholder="Nom ou code"></div>
+        <div><label for="tSess">Session</label><select id="tSess"></select></div>
+        <button id="tPrint" class="btn ghost">Imprimer la planche</button>
+        <button id="tCsv" class="btn ghost">Exporter CSV</button>
+      </div>
+      <div class="scroll"><table class="tbl"><thead><tr><th>Code</th><th>Nom</th><th>Session</th><th>Statut</th><th></th></tr></thead><tbody id="tBody"></tbody></table></div>
+      <p id="tMore" class="hint" hidden></p>
+    </div>
+  </section>
+
+  <!-- SESSIONS -->
+  <section id="tab-sessions" hidden>
+    <div class="card">
+      <h2>Sessions et capacités</h2>
+      <div class="scroll"><table class="tbl"><thead><tr><th>Nom</th><th>Horaire</th><th>Capacité max</th><th>Entrés</th><th></th></tr></thead><tbody id="sBody"></tbody></table></div>
+      <div style="margin-top:12px"><button id="sAdd" class="btn ghost">+ Ajouter une session</button></div>
+      <p class="hint">Quand le compteur atteint la capacité, les scans suivants sont refusés (« Salle complète »). Annule une entrée dans le Journal pour libérer une place.</p>
+    </div>
+  </section>
+
+  <!-- JOURNAL -->
+  <section id="tab-log" hidden>
+    <div class="card">
+      <h2>Journal des scans</h2>
+      <div class="row" style="margin-bottom:12px">
+        <div><label for="lSess">Session</label><select id="lSess"></select></div>
+        <div><label for="lRes">Résultat</label>
+          <select id="lRes"><option value="">Tous</option><option value="ok">Entrées validées</option><option value="dup">Doublons</option><option value="full">Salle complète</option><option value="wrong">Mauvaise session</option><option value="invalid">Invalides</option></select></div>
+        <button id="lCsv" class="btn ghost">Exporter CSV</button>
+      </div>
+      <div class="scroll"><table class="tbl"><thead><tr><th>Heure</th><th>Code</th><th>Nom</th><th>Session</th><th>Résultat</th><th></th></tr></thead><tbody id="lBody"></tbody></table></div>
+      <p id="lMore" class="hint" hidden></p>
+    </div>
+  </section>
+
+  <!-- RÉGLAGES -->
+  <section id="tab-settings" hidden>
+    <div class="card">
+      <h2>Personnalisation</h2>
+      <div class="row">
+        <div><label for="setEvent">Nom de l'événement</label><input id="setEvent"></div>
+        <div><label for="setClient">Nom du client</label><input id="setClient"></div>
+        <div style="flex:0 1 110px"><label for="setBrand">Couleur</label><input id="setBrand" type="color"></div>
+      </div>
+      <div class="row" style="margin-top:14px">
+        <div style="flex:0 0 auto"><label>Logo</label><img id="logoPrev" class="logo-prev" alt="" hidden></div>
+        <div><label for="logoFile">Importer un logo (PNG, JPG, SVG)</label><input id="logoFile" type="file" accept="image/*"></div>
+        <button id="logoDel" class="btn ghost">Retirer le logo</button>
+      </div>
+      <p class="hint">Le logo et la couleur apparaissent dans l'en-tête, sur les billets imprimés et sur les billets PNG.</p>
+    </div>
+    <div class="card">
+      <h2>Données</h2>
+      <div class="row">
+        <button id="exJson" class="btn ghost">Exporter une sauvegarde (JSON)</button>
+        <div><label for="imJson">Restaurer une sauvegarde</label><input id="imJson" type="file" accept="application/json,.json"></div>
+        <button id="reset" class="btn danger">Tout effacer</button>
+      </div>
+      <p class="hint">Les données sont stockées sur cet appareil. Pour scanner sur plusieurs appareils, exporte puis restaure la sauvegarde, ou utilise un seul appareil à l'entrée.</p>
+    </div>
+  </section>
+</main>
+
+<div id="printSheet"></div>
+
+<!-- Librairies QR : jsDelivr, puis unpkg, puis secours local (dossier lib/ à côté de ce fichier) -->
+<script src="https://cdn.jsdelivr.net/npm/qrcode-generator@1.4.4/qrcode.js"></script>
+<script>window.qrcode||document.write('<script src="https://unpkg.com/qrcode-generator@1.4.4/qrcode.js"><\/script>');</script>
+<script>window.qrcode||document.write('<script src="lib/qrcode.js"><\/script>');</script>
+<script src="https://cdn.jsdelivr.net/npm/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
+<script>window.Html5Qrcode||document.write('<script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"><\/script>');</script>
+<script>window.Html5Qrcode||document.write('<script src="lib/html5-qrcode.min.js"><\/script>');</script>
+<script>
+(function(){
+'use strict';
+
+/* ====== À PERSONNALISER ====== */
+const CONFIG={
+  SECRET:'CHANGE-MOI-AVANT-DE-DISTRIBUER', // identique sur tous les appareils qui valident les billets
+  PREFIX:'TK',
+  ACCEPT_UNKNOWN:true,   // true : accepte un code valide absent de cet appareil (billets générés ailleurs)
+                         // false : n'accepte que les billets présents dans l'onglet Billets (plus strict)
+  DEFAULT_EVENT:'Mon événement',
+  DEFAULT_CLIENT:'',
+  DEFAULT_COLOR:'#e4572e',
+  DEFAULT_LOGO:''                            // ex. 'logo.png' placé à côté de ce fichier
+};
+/* ============================= */
+
+const KEY='billetterie.v1';
+const $=(s,r=document)=>r.querySelector(s);
+const $$=(s,r=document)=>[...r.querySelectorAll(s)];
+const esc=s=>String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const uid=()=>Math.random().toString(36).slice(2,9);
+const fdt=ts=>new Date(ts).toLocaleString('fr-FR');
+const ftm=ts=>new Date(ts).toLocaleTimeString('fr-FR',{hour:'2-digit',minute:'2-digit',second:'2-digit'});
+
+/* ---------- Codes billets (avec somme de contrôle) ---------- */
+const ALPHA='ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+function fnv(str){let h=0x811c9dc5;for(let i=0;i<str.length;i++){h^=str.charCodeAt(i);h=Math.imul(h,0x01000193)>>>0;}return h>>>0;}
+function checkOf(body){const h=fnv(body+CONFIG.SECRET);return ALPHA[h%32]+ALPHA[(h>>>5)%32];}
+function newCode(){
+  for(;;){
+    const a=new Uint8Array(6);crypto.getRandomValues(a);
+    let b='';for(const x of a)b+=ALPHA[x%32];
+    const code=CONFIG.PREFIX+'-'+b+checkOf(b);
+    if(!S.tickets.some(t=>t.code===code))return code;
+  }
+}
+function norm(raw){return String(raw||'').trim().toUpperCase().replace(/\s+/g,'');}
+function validCode(code){
+  const m=new RegExp('^'+CONFIG.PREFIX+'-([A-Z2-9]{6})([A-Z2-9]{2})$').exec(code);
+  return !!m&&checkOf(m[1])===m[2]&&[...m[1]].every(c=>ALPHA.includes(c));
+}
+
+/* ---------- État ---------- */
+let storageOK=true;
+function defaults(){
+  const s1=uid();
+  return{settings:{eventName:CONFIG.DEFAULT_EVENT,clientName:CONFIG.DEFAULT_CLIENT,brand:CONFIG.DEFAULT_COLOR,logo:''},
+    sessions:[{id:s1,name:'Session 1',time:'',capacity:50}],tickets:[],log:[],activeSession:s1};
+}
+function load(){try{const r=localStorage.getItem(KEY);if(r)return JSON.parse(r);}catch(e){storageOK=false;}return null;}
+let S=load()||defaults();
+function save(){try{localStorage.setItem(KEY,JSON.stringify(S));}catch(e){storageOK=false;$('#storageWarn').hidden=false;}}
+const sessionById=id=>S.sessions.find(s=>s.id===id);
+const okEntries=sid=>S.log.filter(r=>r.result==='ok'&&!r.cancelled&&(sid==null||r.sessionId===sid));
+const countOf=sid=>okEntries(sid).length;
+
+/* ---------- Utilitaires ---------- */
+function toast(msg){const t=document.createElement('div');t.className='toast';t.textContent=msg;document.body.appendChild(t);setTimeout(()=>t.remove(),2600);}
+function saveBlob(blob,name){const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=name;document.body.appendChild(a);a.click();setTimeout(()=>{URL.revokeObjectURL(a.href);a.remove();},800);}
+function csv(rows){return '﻿'+rows.map(r=>r.map(c=>'"'+String(c==null?'':c).replace(/"/g,'""')+'"').join(';')).join('\r\n');}
+let AC;
+function beep(f,d,type){try{AC=AC||new(window.AudioContext||window.webkitAudioContext)();const o=AC.createOscillator(),g=AC.createGain();o.type=type||'sine';o.frequency.value=f;g.gain.value=.15;o.connect(g);g.connect(AC.destination);o.start();o.stop(AC.currentTime+d/1000);}catch(e){}}
+function feedback(ok){if(ok){beep(880,130);navigator.vibrate&&navigator.vibrate(60);}else{beep(190,380,'square');navigator.vibrate&&navigator.vibrate([120,60,120]);}}
+function loadImg(src){return new Promise(res=>{if(!src)return res(null);const i=new Image();i.onload=()=>res(i);i.onerror=()=>res(null);i.src=src;});}
+const logoSrc=()=>S.settings.logo||CONFIG.DEFAULT_LOGO||'';
+
+/* ---------- QR ---------- */
+function qrCanvas(text,px){
+  const q=qrcode(0,'M');q.addData(text);q.make();
+  const n=q.getModuleCount(),m=4,cell=Math.max(2,Math.floor(px/(n+2*m))),size=cell*(n+2*m);
+  const c=document.createElement('canvas');c.width=c.height=size;
+  const x=c.getContext('2d');x.fillStyle='#fff';x.fillRect(0,0,size,size);x.fillStyle='#000';
+  for(let r=0;r<n;r++)for(let k=0;k<n;k++)if(q.isDark(r,k))x.fillRect((k+m)*cell,(r+m)*cell,cell,cell);
+  return c;
+}
+async function ticketPNG(t){
+  const W=640,H=860,c=document.createElement('canvas');c.width=W;c.height=H;
+  const x=c.getContext('2d');
+  x.fillStyle='#fff';x.fillRect(0,0,W,H);
+  x.fillStyle=S.settings.brand;x.fillRect(0,0,W,150);
+  let tx=40;
+  const lg=await loadImg(logoSrc());
+  if(lg){
+    const h=96,w=Math.min(220,lg.width*h/lg.height),hh=w*lg.height/lg.width;
+    x.fillStyle='#fff';x.fillRect(30,25,w+20,100);
+    x.drawImage(lg,40,25+(100-hh)/2,w,hh);
+    tx=w+60;
+  }
+  x.fillStyle='#fff';x.font='bold 34px system-ui,sans-serif';x.textBaseline='middle';
+  x.fillText(S.settings.eventName.slice(0,22),tx,75);
+  const qr=qrCanvas(t.code,480);
+  x.drawImage(qr,80,185,480,480);
+  x.fillStyle='#111';x.textAlign='center';
+  x.font='bold 36px system-ui,sans-serif';x.fillText(t.name||'Invité',W/2,720);
+  x.font='30px ui-monospace,Menlo,monospace';x.fillText(t.code,W/2,772);
+  const se=t.sessionId?sessionById(t.sessionId):null;
+  x.fillStyle='#555';x.font='24px system-ui,sans-serif';
+  x.fillText(se?se.name+(se.time?' · '+se.time:''):'Toutes sessions',W/2,818);
+  c.toBlob(b=>saveBlob(b,'billet-'+t.code+'.png'));
+}
+
+/* ---------- Marque ---------- */
+function applyBrand(){
+  const s=S.settings;
+  document.documentElement.style.setProperty('--brand',s.brand);
+  $('#evName').textContent=s.eventName;
+  $('#clName').textContent=s.clientName;
+  document.title=s.eventName+' — Billetterie';
+  const lg=logoSrc();
+  $('#logoImg').hidden=!lg;$('#logoFallback').hidden=!!lg;
+  if(lg){$('#logoImg').src=lg;}
+  $('#logoFallback').textContent=(s.eventName||'★').trim().charAt(0).toUpperCase();
+  $('#logoPrev').hidden=!lg;if(lg)$('#logoPrev').src=lg;
+}
+
+/* ---------- Sélecteurs de session ---------- */
+function opt(v,t,sel){return '<option value="'+esc(v)+'"'+(sel?' selected':'')+'>'+esc(t)+'</option>';}
+function fillSelects(){
+  const label=s=>s.name+(s.time?' — '+s.time:'');
+  const keep={a:$('#activeSession').value||S.activeSession,g:$('#gSession').value,t:$('#tSess').value,l:$('#lSess').value};
+  $('#activeSession').innerHTML=S.sessions.map(s=>opt(s.id,label(s)+'  ('+countOf(s.id)+'/'+s.capacity+')',s.id===S.activeSession)).join('');
+  $('#gSession').innerHTML=opt('','Toutes les sessions',!keep.g)+S.sessions.map(s=>opt(s.id,label(s),s.id===keep.g)).join('');
+  const all=sel=>opt('','Toutes',!sel);
+  $('#tSess').innerHTML=all(keep.t)+S.sessions.map(s=>opt(s.id,label(s),s.id===keep.t)).join('');
+  $('#lSess').innerHTML=all(keep.l)+S.sessions.map(s=>opt(s.id,label(s),s.id===keep.l)).join('');
+}
+
+/* ---------- Compteur ---------- */
+function renderCounter(){
+  const ses=sessionById(S.activeSession);if(!ses)return;
+  const n=countOf(ses.id),cap=Math.max(0,ses.capacity|0),full=n>=cap;
+  $('#cNow').textContent=n;$('#cMax').textContent=cap;
+  const bar=$('#cBar');bar.style.width=(cap?Math.min(100,n/cap*100):100)+'%';
+  bar.style.background=full?'var(--bad)':(n/cap>.85?'var(--warn)':'var(--ok)');
+  const note=$('#cNote');
+  note.className='note'+(full?' full':'');
+  note.textContent=full?'COMPLET — les entrées sont bloquées':(cap-n)+' place'+(cap-n>1?'s':'')+' restante'+(cap-n>1?'s':'');
+}
+
+/* ---------- Résultat de scan ---------- */
+const LABELS={ok:'Entrée validée',dup:'Déjà entré',full:'Salle complète',invalid:'Billet invalide',wrong:'Mauvaise session'};
+function showResult(kind,title,detail,sub){
+  const r=$('#result');r.className='result '+kind;
+  r.innerHTML='<div class="t">'+esc(title)+'</div>'+(detail?'<div class="d">'+esc(detail)+'</div>':'')+(sub?'<div class="s">'+esc(sub)+'</div>':'');
+}
+let last={code:'',ts:0};
+function processCode(raw,src){
+  const code=norm(raw);if(!code)return;
+  const now=Date.now();
+  if(src==='camera'&&code===last.code&&now-last.ts<3000)return;
+  last={code:code,ts:now};
+  const sid=S.activeSession,ses=sessionById(sid);
+  if(!ses){showResult('invalid','Aucune session','Crée une session dans l\'onglet Sessions.');return;}
+  const t=S.tickets.find(x=>x.code===code);
+  const name=t?t.name:'';
+  let result,detail,sub;
+  if(!t&&(!CONFIG.ACCEPT_UNKNOWN||!validCode(code))){result='invalid';detail='Code non reconnu';sub=code;}
+  else if(t&&t.sessionId&&t.sessionId!==sid){
+    const o=sessionById(t.sessionId);result='wrong';detail='Ce billet est valable pour : '+(o?o.name:'une autre session');sub=name||code;
+  }else{
+    const dup=okEntries(sid).find(r=>r.code===code);
+    if(dup){result='dup';detail=(name||code);sub='Entré à '+ftm(dup.ts);}
+    else if(countOf(sid)>=ses.capacity){result='full';detail='Capacité atteinte ('+countOf(sid)+'/'+ses.capacity+')';sub=name||code;}
+    else{
+      result='ok';
+      if(!t)S.tickets.push({code:code,name:'',sessionId:'',createdAt:now});
+      detail=name||code;sub='Place '+(countOf(sid)+1)+' sur '+ses.capacity;
+    }
+  }
+  S.log.push({id:uid(),ts:now,code:code,name:name,sessionId:sid,result:result});
+  save();
+  showResult(result,LABELS[result],detail,sub);
+  feedback(result==='ok');
+  fillSelects();renderCounter();renderTickets();renderSessions();renderLog();
+  if(matchMedia('(pointer:fine)').matches)$('#codeIn').focus();
+}
+
+/* ---------- Caméra ---------- */
+let scanner=null,camOn=false;
+async function startCam(){
+  const msg=$('#camMsg');msg.textContent='';
+  if(!window.Html5Qrcode){msg.textContent='Librairie de scan indisponible.';return;}
+  if(!window.isSecureContext){msg.textContent='La caméra exige une page en HTTPS (ou localhost). Utilise la saisie manuelle ou une douchette en attendant.';return;}
+  try{
+    scanner=new Html5Qrcode('reader');
+    await scanner.start({facingMode:'environment'},{fps:10,qrbox:{width:240,height:240}},txt=>processCode(txt,'camera'),()=>{});
+    camOn=true;$('#camBtn').textContent='Arrêter la caméra';
+  }catch(e){
+    scanner=null;camOn=false;
+    msg.textContent='Impossible d\'accéder à la caméra : autorise-la dans le navigateur.';
+  }
+}
+async function stopCam(){
+  if(scanner){try{await scanner.stop();scanner.clear();}catch(e){}scanner=null;}
+  camOn=false;$('#camBtn').textContent='Activer la caméra';
+}
+
+/* ---------- Billets ---------- */
+let shownTickets=[];
+function renderTickets(){
+  const q=($('#tSearch').value||'').trim().toLowerCase(),fs=$('#tSess').value;
+  const list=S.tickets.filter(t=>(!q||t.code.toLowerCase().includes(q)||(t.name||'').toLowerCase().includes(q))&&(!fs||t.sessionId===fs));
+  shownTickets=list;
+  const entered={};okEntries().forEach(r=>{(entered[r.code]=entered[r.code]||[]).push(r.sessionId);});
+  $('#tCount').textContent='— '+list.length+(list.length!==S.tickets.length?' sur '+S.tickets.length:'');
+  const MAX=300;
+  $('#tBody').innerHTML=list.slice(0,MAX).map(t=>{
+    const se=t.sessionId?sessionById(t.sessionId):null;
+    const en=entered[t.code];
+    const st=en?'<span class="badge b-ok">Entré · '+esc(en.map(i=>(sessionById(i)||{}).name||'?').join(', '))+'</span>':'<span class="note">—</span>';
+    return '<tr><td class="mono">'+esc(t.code)+'</td><td>'+esc(t.name)+'</td><td>'+esc(se?se.name:'Toutes')+'</td><td>'+st+'</td>'+
+      '<td><div class="actions"><button class="btn ghost sm" data-act="png" data-code="'+esc(t.code)+'">PNG</button><button class="btn ghost sm" data-act="del" data-code="'+esc(t.code)+'">Suppr.</button></div></td></tr>';
+  }).join('');
+  const more=$('#tMore');more.hidden=list.length<=MAX;more.textContent='Affichage limité aux '+MAX+' premiers billets (l\'impression et l\'export CSV incluent tous les billets filtrés).';
+}
+function genTickets(){
+  const names=$('#gNames').value.split('\n').map(s=>s.trim()).filter(Boolean);
+  let n=names.length||parseInt($('#gQty').value,10)||0;
+  n=Math.max(0,Math.min(500,n));
+  if(!n){toast('Indique une quantité ou des noms.');return;}
+  const sid=$('#gSession').value,now=Date.now();
+  for(let i=0;i<n;i++)S.tickets.push({code:newCode(),name:names[i]||'',sessionId:sid,createdAt:now});
+  save();$('#gNames').value='';
+  renderTickets();toast(n+' billet'+(n>1?'s':'')+' généré'+(n>1?'s':''));
+}
+function printTickets(){
+  if(!shownTickets.length){toast('Aucun billet à imprimer.');return;}
+  const lg=logoSrc();
+  $('#printSheet').innerHTML=shownTickets.map(t=>{
+    const se=t.sessionId?sessionById(t.sessionId):null;
+    return '<div class="pcard"><div class="ph">'+(lg?'<img class="lg" src="'+esc(lg)+'" alt="">':'')+'<span class="pe">'+esc(S.settings.eventName)+'</span></div>'+
+      '<img class="qr" src="'+qrCanvas(t.code,400).toDataURL('image/png')+'" alt="">'+
+      (t.name?'<div class="pn">'+esc(t.name)+'</div>':'')+'<div class="pc">'+esc(t.code)+'</div>'+
+      '<div class="ps">'+esc(se?se.name+(se.time?' · '+se.time:''):'Toutes sessions')+'</div></div>';
+  }).join('');
+  document.body.classList.add('printing');
+  setTimeout(()=>{window.print();},150);
+}
+window.addEventListener('afterprint',()=>{document.body.classList.remove('printing');$('#printSheet').innerHTML='';});
+
+/* ---------- Sessions ---------- */
+function renderSessions(){
+  $('#sBody').innerHTML=S.sessions.map(s=>{
+    const used=S.log.some(r=>r.sessionId===s.id);
+    return '<tr data-id="'+s.id+'"><td><input data-f="name" value="'+esc(s.name)+'"></td><td><input data-f="time" value="'+esc(s.time)+'" placeholder="ex. 14h-15h"></td>'+
+      '<td><input data-f="capacity" type="number" min="1" value="'+s.capacity+'" style="width:110px"></td><td>'+countOf(s.id)+'</td>'+
+      '<td><div class="actions"><button class="btn ghost sm" data-act="pick">Utiliser</button><button class="btn ghost sm" data-act="del"'+((used||S.sessions.length<2)?' disabled title="Session utilisée ou dernière session"':'')+'>Suppr.</button></div></td></tr>';
+  }).join('');
+}
+
+/* ---------- Journal ---------- */
+function filteredLog(){
+  const fs=$('#lSess').value,fr=$('#lRes').value;
+  return S.log.filter(r=>(!fs||r.sessionId===fs)&&(!fr||r.result===fr)).slice().reverse();
+}
+function renderLog(){
+  const list=filteredLog(),MAX=500;
+  $('#lBody').innerHTML=list.slice(0,MAX).map(r=>{
+    const se=sessionById(r.sessionId);
+    const badge=r.cancelled?'<span class="badge b-x">Annulée</span>':'<span class="badge b-'+r.result+'">'+LABELS[r.result]+'</span>';
+    const act=(r.result==='ok'&&!r.cancelled)?'<button class="btn ghost sm" data-act="cancel" data-id="'+r.id+'">Annuler</button>':'';
+    return '<tr><td>'+esc(fdt(r.ts))+'</td><td class="mono">'+esc(r.code)+'</td><td>'+esc(r.name)+'</td><td>'+esc(se?se.name:'?')+'</td><td>'+badge+'</td><td>'+act+'</td></tr>';
+  }).join('');
+  const more=$('#lMore');more.hidden=list.length<=MAX;more.textContent='Affichage limité aux '+MAX+' derniers scans (l\'export CSV les inclut tous).';
+}
+
+/* ---------- Événements ---------- */
+$('#tabs').addEventListener('click',e=>{
+  const b=e.target.closest('button[data-tab]');if(!b)return;
+  $$('#tabs button').forEach(x=>x.classList.toggle('on',x===b));
+  ['scan','tickets','sessions','log','settings'].forEach(t=>{$('#tab-'+t).hidden=(t!==b.dataset.tab);});
+  if(b.dataset.tab!=='scan'&&camOn)stopCam();
+  if(b.dataset.tab==='log')renderLog();
+  if(b.dataset.tab==='sessions')renderSessions();
+  if(b.dataset.tab==='tickets')renderTickets();
+});
+$('#activeSession').addEventListener('change',e=>{S.activeSession=e.target.value;save();renderCounter();fillSelects();$('#result').className='result idle';$('#result').innerHTML='<div class="d">En attente d\'un scan…</div>';});
+$('#camBtn').addEventListener('click',()=>{camOn?stopCam():startCam();});
+$('#manual').addEventListener('submit',e=>{e.preventDefault();const v=$('#codeIn').value;$('#codeIn').value='';processCode(v,'manual');});
+
+$('#gBtn').addEventListener('click',genTickets);
+$('#tSearch').addEventListener('input',renderTickets);
+$('#tSess').addEventListener('change',renderTickets);
+$('#tPrint').addEventListener('click',printTickets);
+$('#tCsv').addEventListener('click',()=>{
+  const rows=[['Code','Nom','Session','Créé le']].concat(shownTickets.map(t=>[t.code,t.name,(sessionById(t.sessionId)||{}).name||'Toutes',fdt(t.createdAt)]));
+  saveBlob(new Blob([csv(rows)],{type:'text/csv;charset=utf-8'}),'billets.csv');
+});
+$('#tBody').addEventListener('click',e=>{
+  const b=e.target.closest('button[data-act]');if(!b)return;
+  const t=S.tickets.find(x=>x.code===b.dataset.code);if(!t)return;
+  if(b.dataset.act==='png')ticketPNG(t);
+  if(b.dataset.act==='del'&&confirm('Supprimer le billet '+t.code+' ? Son historique de scans est conservé.')){
+    S.tickets=S.tickets.filter(x=>x!==t);save();renderTickets();
+  }
+});
+
+$('#sAdd').addEventListener('click',()=>{S.sessions.push({id:uid(),name:'Session '+(S.sessions.length+1),time:'',capacity:50});save();renderSessions();fillSelects();});
+$('#sBody').addEventListener('change',e=>{
+  const inp=e.target.closest('input[data-f]');if(!inp)return;
+  const s=sessionById(inp.closest('tr').dataset.id);if(!s)return;
+  if(inp.dataset.f==='capacity'){s.capacity=Math.max(1,parseInt(inp.value,10)||1);inp.value=s.capacity;}
+  else s[inp.dataset.f]=inp.value.trim();
+  save();fillSelects();renderCounter();renderTickets();
+});
+$('#sBody').addEventListener('click',e=>{
+  const b=e.target.closest('button[data-act]');if(!b||b.disabled)return;
+  const id=b.closest('tr').dataset.id;
+  if(b.dataset.act==='pick'){S.activeSession=id;save();fillSelects();renderCounter();toast('Session active : '+sessionById(id).name);}
+  if(b.dataset.act==='del'&&confirm('Supprimer cette session ?')){
+    S.sessions=S.sessions.filter(s=>s.id!==id);S.tickets.forEach(t=>{if(t.sessionId===id)t.sessionId='';});
+    if(S.activeSession===id)S.activeSession=S.sessions[0].id;
+    save();renderSessions();fillSelects();renderCounter();renderTickets();
+  }
+});
+
+$('#lSess').addEventListener('change',renderLog);
+$('#lRes').addEventListener('change',renderLog);
+$('#lCsv').addEventListener('click',()=>{
+  const rows=[['Date et heure','Code','Nom','Session','Résultat','Annulée']].concat(S.log.map(r=>[fdt(r.ts),r.code,r.name,(sessionById(r.sessionId)||{}).name||'?',LABELS[r.result],r.cancelled?'oui':'']));
+  saveBlob(new Blob([csv(rows)],{type:'text/csv;charset=utf-8'}),'journal-entrees.csv');
+});
+$('#lBody').addEventListener('click',e=>{
+  const b=e.target.closest('button[data-act="cancel"]');if(!b)return;
+  const r=S.log.find(x=>x.id===b.dataset.id);if(!r)return;
+  if(confirm('Annuler cette entrée ? La place sera libérée.')){r.cancelled=true;r.cancelledAt=Date.now();save();fillSelects();renderCounter();renderLog();renderTickets();renderSessions();}
+});
+
+$('#setEvent').addEventListener('input',e=>{S.settings.eventName=e.target.value;save();applyBrand();});
+$('#setClient').addEventListener('input',e=>{S.settings.clientName=e.target.value;save();applyBrand();});
+$('#setBrand').addEventListener('input',e=>{S.settings.brand=e.target.value;save();applyBrand();});
+$('#logoFile').addEventListener('change',e=>{
+  const f=e.target.files[0];if(!f)return;
+  const rd=new FileReader();
+  rd.onload=()=>{const im=new Image();im.onload=()=>{
+    const k=Math.min(1,400/Math.max(im.width,im.height)),c=document.createElement('canvas');
+    c.width=Math.max(1,Math.round(im.width*k));c.height=Math.max(1,Math.round(im.height*k));
+    c.getContext('2d').drawImage(im,0,0,c.width,c.height);
+    S.settings.logo=c.toDataURL('image/png');save();applyBrand();toast('Logo mis à jour');
+  };im.onerror=()=>toast('Image illisible.');im.src=rd.result;};
+  rd.readAsDataURL(f);
+});
+$('#logoDel').addEventListener('click',()=>{S.settings.logo='';save();applyBrand();});
+$('#exJson').addEventListener('click',()=>{saveBlob(new Blob([JSON.stringify(S)],{type:'application/json'}),'sauvegarde-billetterie.json');});
+$('#imJson').addEventListener('change',e=>{
+  const f=e.target.files[0];if(!f)return;
+  const rd=new FileReader();
+  rd.onload=()=>{
+    try{
+      const d=JSON.parse(rd.result);
+      if(!d||!Array.isArray(d.sessions)||!d.sessions.length||!Array.isArray(d.tickets)||!Array.isArray(d.log))throw 0;
+      if(!confirm('Remplacer toutes les données de cet appareil par la sauvegarde ?'))return;
+      S=Object.assign(defaults(),d);S.settings=Object.assign(defaults().settings,d.settings||{});
+      if(!sessionById(S.activeSession))S.activeSession=S.sessions[0].id;
+      save();init();toast('Sauvegarde restaurée');
+    }catch(err){toast('Fichier de sauvegarde invalide.');}
+    e.target.value='';
+  };
+  rd.readAsText(f);
+});
+$('#reset').addEventListener('click',()=>{
+  if(confirm('Tout effacer (billets, sessions, journal, réglages) ?')&&confirm('Vraiment ? Cette action est définitive.')){S=defaults();save();init();}
+});
+
+/* ---------- Démarrage ---------- */
+function init(){
+  $('#storageWarn').hidden=storageOK;
+  if(typeof qrcode==='undefined'){
+    const w=document.createElement('div');w.className='warn';
+    w.textContent='Librairie QR non chargée : connecte-toi à Internet au premier chargement, ou place qrcode.js et html5-qrcode.min.js dans un dossier lib/ à côté de cette page. Le scan par saisie manuelle reste possible.';
+    $('main').prepend(w);
+  }
+  $('#setEvent').value=S.settings.eventName;$('#setClient').value=S.settings.clientName;$('#setBrand').value=S.settings.brand;
+  applyBrand();fillSelects();renderCounter();renderTickets();renderSessions();renderLog();
+}
+init();
+window.__billetterie={processCode:processCode,getState:()=>S,newCode:newCode,validCode:validCode,genTickets:genTickets};
+})();
+</script>
+</body>
+</html>
