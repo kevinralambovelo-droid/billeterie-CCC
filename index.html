@@ -145,6 +145,13 @@ textarea{resize:vertical;min-height:80px}
   <!-- BILLETS -->
   <section id="tab-tickets" hidden>
     <div class="card">
+      <h2>Importer la liste des réservations</h2>
+      <label for="impFile">Fichier CSV de l'onglet « Billets » (Google Sheets)</label>
+      <input id="impFile" type="file" accept=".csv,text/csv,text/plain">
+      <p id="impMsg" class="note" style="margin:10px 0 0"></p>
+      <p class="hint">Dans Google Sheets : onglet « Billets » → Fichier → Télécharger → Valeurs séparées par des virgules (.csv). Tu peux réimporter à tout moment : les nouveaux billets sont ajoutés, les autres mis à jour. La liste reste sur cet appareil, rien n'est envoyé en ligne.</p>
+    </div>
+    <div class="card">
       <h2>Générer des billets</h2>
       <div class="row">
         <div style="flex:0 1 130px"><label for="gQty">Quantité</label><input id="gQty" type="number" min="1" max="500" value="10"></div>
@@ -211,6 +218,11 @@ textarea{resize:vertical;min-height:80px}
       <p class="hint">Le logo et la couleur apparaissent dans l'en-tête, sur les billets imprimés et sur les billets PNG.</p>
     </div>
     <div class="card">
+      <h2>Contrôle des billets</h2>
+      <label style="display:flex;gap:10px;align-items:center;color:var(--text);margin:0"><input id="setStrict" type="checkbox" style="width:auto"> Refuser les billets absents de la liste importée</label>
+      <p class="hint">Activé automatiquement après un import. Désactivé, l'appli accepte tout code valide, même s'il n'est pas dans la liste.</p>
+    </div>
+    <div class="card">
       <h2>Données</h2>
       <div class="row">
         <button id="exJson" class="btn ghost">Exporter une sauvegarde (JSON)</button>
@@ -237,8 +249,8 @@ textarea{resize:vertical;min-height:80px}
 
 /* ====== À PERSONNALISER ====== */
 const CONFIG={
-  SECRET:'PhantomK', // identique sur tous les appareils qui valident les billets
-  PREFIX:'CCC',
+  SECRET:'CHANGE-MOI-AVANT-DE-DISTRIBUER', // identique sur tous les appareils qui valident les billets
+  PREFIX:'TK',
   ACCEPT_UNKNOWN:true,   // true : accepte un code valide absent de cet appareil (billets générés ailleurs)
                          // false : n'accepte que les billets présents dans l'onglet Billets (plus strict)
   DEFAULT_EVENT:'Mon événement',
@@ -284,6 +296,7 @@ function defaults(){
 function load(){try{const r=localStorage.getItem(KEY);if(r)return JSON.parse(r);}catch(e){storageOK=false;}return null;}
 let S=load()||defaults();
 function save(){try{localStorage.setItem(KEY,JSON.stringify(S));}catch(e){storageOK=false;$('#storageWarn').hidden=false;}}
+const isStrict=()=>S.settings.strict!=null?!!S.settings.strict:!CONFIG.ACCEPT_UNKNOWN;
 const sessionById=id=>S.sessions.find(s=>s.id===id);
 const okEntries=sid=>S.log.filter(r=>r.result==='ok'&&!r.cancelled&&(sid==null||r.sessionId===sid));
 const countOf=sid=>okEntries(sid).length;
@@ -388,7 +401,7 @@ function processCode(raw,src){
   const t=S.tickets.find(x=>x.code===code);
   const name=t?t.name:'';
   let result,detail,sub;
-  if(!t&&(!CONFIG.ACCEPT_UNKNOWN||!validCode(code))){result='invalid';detail='Code non reconnu';sub=code;}
+  if(!t&&(isStrict()||!validCode(code))){result='invalid';detail=(isStrict()&&validCode(code))?'Billet absent de la liste importée':'Code non reconnu';sub=code;}
   else if(t&&t.sessionId&&t.sessionId!==sid){
     const o=sessionById(t.sessionId);result='wrong';detail='Ce billet est valable pour : '+(o?o.name:'une autre session');sub=name||code;
   }else{
@@ -596,9 +609,90 @@ $('#reset').addEventListener('click',()=>{
   if(confirm('Tout effacer (billets, sessions, journal, réglages) ?')&&confirm('Vraiment ? Cette action est définitive.')){S=defaults();save();init();}
 });
 
+/* ---------- Import de la liste (CSV Google Sheets) ---------- */
+const normTxt=s=>String(s==null?'':s).normalize('NFD').replace(/[̀-ͯ]/g,'').toLowerCase().replace(/\s+/g,' ').trim();
+const sessKey=s=>normTxt(s).replace(/[–—-]/g,' ').replace(/\s+/g,' ').trim();
+function parseCSV(text){
+  text=String(text).replace(/^﻿/,'');
+  const first=text.split(/\r?\n/,1)[0]||'';
+  const cnt=d=>{let n=0,q=false;for(const ch of first){if(ch==='"')q=!q;else if(!q&&ch===d)n++;}return n;};
+  const delim=[',',';','\t'].map(d=>[d,cnt(d)]).sort((a,b)=>b[1]-a[1])[0][0];
+  const rows=[];let row=[],f='',q=false;
+  for(let i=0;i<text.length;i++){
+    const ch=text[i];
+    if(q){
+      if(ch==='"'){if(text[i+1]==='"'){f+='"';i++;}else q=false;}
+      else f+=ch;
+    }else if(ch==='"')q=true;
+    else if(ch===delim){row.push(f);f='';}
+    else if(ch==='\n'||ch==='\r'){if(ch==='\r'&&text[i+1]==='\n')i++;row.push(f);f='';rows.push(row);row=[];}
+    else f+=ch;
+  }
+  if(f!==''||row.length){row.push(f);rows.push(row);}
+  return rows.filter(r=>r.some(c=>String(c).trim()!==''));
+}
+function importTickets(text){
+  const rows=parseCSV(text);
+  if(rows.length<2)throw new Error('Fichier vide ou illisible.');
+  const head=rows[0].map(normTxt);
+  const iCode=head.findIndex(h=>h.includes('code'));
+  const iNom=head.findIndex(h=>h.startsWith('nom'));
+  const iSes=head.findIndex(h=>h.includes('session'));
+  if(iCode<0)throw new Error('Colonne « Code billet » introuvable. Exporte bien l\'onglet « Billets » (pas « Réponses au formulaire »).');
+  const idx=new Map(S.tickets.map(t=>[t.code,t]));
+  const createdSessions=[];
+  let added=0,updated=0,ignored=0,unsigned=0;
+  for(let i=1;i<rows.length;i++){
+    const r=rows[i];
+    const code=norm(r[iCode]);
+    if(!/^[A-Z0-9-]{6,30}$/.test(code)){ignored++;continue;}
+    const name=iNom>=0?String(r[iNom]||'').trim():'';
+    const sesName=iSes>=0?String(r[iSes]||'').trim():'';
+    let sid='';
+    if(sesName){
+      let s=S.sessions.find(x=>sessKey(x.name)===sessKey(sesName)||sessKey(x.name+' '+x.time)===sessKey(sesName));
+      if(!s){s={id:uid(),name:sesName,time:'',capacity:50};S.sessions.push(s);createdSessions.push(sesName);}
+      sid=s.id;
+    }
+    const t=idx.get(code);
+    if(t){t.name=name||t.name;t.sessionId=sid||t.sessionId;updated++;}
+    else{const nt={code:code,name:name,sessionId:sid,createdAt:Date.now()};S.tickets.push(nt);idx.set(code,nt);added++;}
+    if(!validCode(code))unsigned++;
+  }
+  if(createdSessions.length&&S.sessions.length>1){ // retire la session « Session 1 » d'origine si personne ne s'en sert
+    const d=S.sessions[0];
+    if(d.name==='Session 1'&&!d.time&&d.capacity===50&&!S.log.some(x=>x.sessionId===d.id)&&!S.tickets.some(x=>x.sessionId===d.id)){
+      S.sessions.shift();
+      if(S.activeSession===d.id)S.activeSession=S.sessions[0].id;
+    }
+  }
+  if(added+updated>0)S.settings.strict=true;
+  save();fillSelects();renderCounter();renderTickets();renderSessions();renderLog();
+  $('#setStrict').checked=isStrict();
+  let msg='✔ '+added+' billet'+(added>1?'s':'')+' ajouté'+(added>1?'s':'')+', '+updated+' mis à jour'+(ignored?', '+ignored+' ligne(s) ignorée(s)':'')+'.';
+  if(createdSessions.length)msg+=' Sessions créées : '+createdSessions.join(' ; ')+' (capacité 50 par défaut : à régler dans l\'onglet Sessions).';
+  if(added+updated>0)msg+=' Les billets absents de la liste sont maintenant refusés.';
+  if(unsigned)msg+=' ⚠ '+unsigned+' code(s) ne passent pas la somme de contrôle : le SECRET du script Google est différent de celui de l\'appli. Ils restent acceptés car ils sont dans la liste.';
+  return msg;
+}
+$('#impFile').addEventListener('change',e=>{
+  const f=e.target.files[0];if(!f)return;
+  const rd=new FileReader();
+  rd.onload=()=>{
+    const m=$('#impMsg');
+    try{m.textContent=importTickets(String(rd.result));m.className='note';}
+    catch(err){m.textContent='✖ '+err.message;m.className='note full';}
+    e.target.value='';
+  };
+  rd.onerror=()=>{$('#impMsg').textContent='✖ Impossible de lire ce fichier.';$('#impMsg').className='note full';e.target.value='';};
+  rd.readAsText(f);
+});
+$('#setStrict').addEventListener('change',e=>{S.settings.strict=e.target.checked;save();});
+
 /* ---------- Démarrage ---------- */
 function init(){
   $('#storageWarn').hidden=storageOK;
+  $('#setStrict').checked=isStrict();
   if(typeof qrcode==='undefined'){
     const w=document.createElement('div');w.className='warn';
     w.textContent='Librairie QR non chargée : connecte-toi à Internet au premier chargement, ou place qrcode.js et html5-qrcode.min.js dans un dossier lib/ à côté de cette page. Le scan par saisie manuelle reste possible.';
